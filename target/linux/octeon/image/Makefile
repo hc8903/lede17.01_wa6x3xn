@@ -42,4 +42,13 @@ define Device/erlite
 endef
 TARGET_DEVICES += erlite
 
+define Device/wa6x3xn
+  DEVICE_TITLE := HUAWEI WA6X3XN
+  KERNEL := kernel-bin | strip-kernel | lzma
+  IMAGES := sysupgrade.tar
+  IMAGE/sysupgrade.tar/squashfs := append-rootfs | pad-extra 128k | sysupgrade-tar rootfs=$$$$@
+  IMAGE/sysupgrade.tar := sysupgrade-tar
+endef
+TARGET_DEVICES += wa6x3xn
+
 $(eval $(call BuildImage))

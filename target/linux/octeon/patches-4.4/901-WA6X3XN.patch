@@ -1,0 +1,92 @@
+--- a/arch/mips/cavium-octeon/executive/cvmx-helper-board.c
++++ b/arch/mips/cavium-octeon/executive/cvmx-helper-board.c
+@@ -90,7 +90,6 @@ int cvmx_helper_board_get_mii_address(int ipd_port)
+ 	case CVMX_BOARD_TYPE_KODAMA:
+ 	case CVMX_BOARD_TYPE_EBH3100:
+ 	case CVMX_BOARD_TYPE_HIKARI:
+-	case CVMX_BOARD_TYPE_CN3010_EVB_HS5:
+ 	case CVMX_BOARD_TYPE_CN3005_EVB_HS5:
+ 	case CVMX_BOARD_TYPE_CN3020_EVB_HS5:
+ 		/*
+@@ -103,6 +102,11 @@ int cvmx_helper_board_get_mii_address(int ipd_port)
+ 			return 9;
+ 		else
+ 			return -1;
++	case CVMX_BOARD_TYPE_CN3010_EVB_HS5:
++		if (ipd_port == 0)
++			return 24;
++		else
++			return -1;
+ 	case CVMX_BOARD_TYPE_NAC38:
+ 		/* Board has 8 RGMII ports PHYs are 0-7 */
+ 		if ((ipd_port >= 0) && (ipd_port < 4))
+@@ -255,7 +259,6 @@ cvmx_helper_link_info_t __cvmx_helper_board_link_get(int ipd_port)
+ 		result.s.speed = 1000;
+ 		return result;
+ 	case CVMX_BOARD_TYPE_EBH3100:
+-	case CVMX_BOARD_TYPE_CN3010_EVB_HS5:
+ 	case CVMX_BOARD_TYPE_CN3005_EVB_HS5:
+ 	case CVMX_BOARD_TYPE_CN3020_EVB_HS5:
+ 		/* Port 1 on these boards is always Gigabit */
+@@ -267,6 +270,9 @@ cvmx_helper_link_info_t __cvmx_helper_board_link_get(int ipd_port)
+ 		}
+ 		/* Fall through to the generic code below */
+ 		break;
++	case CVMX_BOARD_TYPE_CN3010_EVB_HS5:
++			is_broadcom_phy = 1;
++		break;
+ 	case CVMX_BOARD_TYPE_CUST_NB5:
+ 		/* Port 1 on these boards is always Gigabit */
+ 		if (ipd_port == 1) {
+@@ -722,17 +728,6 @@ int __cvmx_helper_board_hardware_enable(int interface)
+ 						   phy_addr & 0xff, 0x2);
+ 				/* Is it a Broadcom PHY? */
+ 				if (phy_identifier == 0x0143) {
+-					cvmx_dprintf("\n");
+-					cvmx_dprintf("ERROR:\n");
+-					cvmx_dprintf
+-					    ("ERROR: Board type is CVMX_BOARD_TYPE_CN3010_EVB_HS5, but Broadcom PHY found.\n");
+-					cvmx_dprintf
+-					    ("ERROR: The board type is mis-configured, and software malfunctions are likely.\n");
+-					cvmx_dprintf
+-					    ("ERROR: All boards require a unique board type to identify them.\n");
+-					cvmx_dprintf("ERROR:\n");
+-					cvmx_dprintf("\n");
+-					cvmx_wait(1000000000);
+ 					cvmx_write_csr(CVMX_ASXX_RX_CLK_SETX
+ 						       (0, interface), 5);
+ 					cvmx_write_csr(CVMX_ASXX_TX_CLK_SETX
+--- a/arch/mips/cavium-octeon/executive/cvmx-helper-rgmii.c
++++ b/arch/mips/cavium-octeon/executive/cvmx-helper-rgmii.c
+@@ -72,7 +72,7 @@ int __cvmx_helper_rgmii_probe(int interface)
+ 			 * On these chips "type" says we're in
+ 			 * GMII/MII mode. This limits us to 2 ports
+ 			 */
+-			num_ports = 2;
++			num_ports = 1;
+ 		} else {
+ 			cvmx_dprintf("ERROR: Unsupported Octeon model in %s\n",
+ 				     __func__);
+@@ -84,7 +84,7 @@ int __cvmx_helper_rgmii_probe(int interface)
+ 		} else if (OCTEON_IS_MODEL(OCTEON_CN31XX)
+ 			   || OCTEON_IS_MODEL(OCTEON_CN30XX)
+ 			   || OCTEON_IS_MODEL(OCTEON_CN50XX)) {
+-			num_ports = 3;
++			num_ports = 1;
+ 		} else {
+ 			cvmx_dprintf("ERROR: Unsupported Octeon model in %s\n",
+ 				     __func__);
+--- a/arch/mips/pci/pci-octeon.c
++++ b/arch/mips/pci/pci-octeon.c
+@@ -209,9 +209,10 @@ const char *octeon_get_pci_interrupts(void)
+ 		/* This is really the NAC38 */
+ 		return "AAAAADABAAAAAAAAAAAAAAAAAAAAAAAA";
+ 	case CVMX_BOARD_TYPE_EBH3100:
+-	case CVMX_BOARD_TYPE_CN3010_EVB_HS5:
+ 	case CVMX_BOARD_TYPE_CN3005_EVB_HS5:
+ 		return "AAABAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
++	case CVMX_BOARD_TYPE_CN3010_EVB_HS5:
++		return "AABA";
+ 	case CVMX_BOARD_TYPE_BBGW_REF:
+ 		return "AABCD";
+ 	case CVMX_BOARD_TYPE_CUST_DSR1000N:

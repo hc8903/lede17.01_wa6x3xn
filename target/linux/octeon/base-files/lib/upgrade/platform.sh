@@ -56,11 +56,37 @@ platform_do_flash() {
 	umount /boot
 }
 
+platform_do_flash_wa6x3xn() {
+	local tar_file=$1
+	local board=$2
+
+	tar xf $tar_file -C /tmp
+
+	echo "flashing kernel to uImageA and uImageB"
+	mtd write /tmp/sysupgrade-$board/kernel uImageA
+	mtd write /tmp/sysupgrade-$board/kernel uImageB
+
+	echo "flashing rootfs to rootfsA and rootfsB"
+	mtd write /tmp/sysupgrade-$board/root rootfsA
+	mtd write /tmp/sysupgrade-$board/root rootfsB
+}
+
 platform_do_upgrade() {
 	local tar_file="$1"
 	local board=$(cat /tmp/sysinfo/board_name)
 	local rootfs="$(platform_get_rootfs)"
 	local kernel=
+
+	case "$board" in
+	wa6x3xn)
+		platform_do_flash_wa6x3xn $tar_file $board
+		return 0
+		;;
+	aruba)
+		default_do_upgrade "$ARGV"
+		return 0
+		;;
+	esac
 
 	[ -b "${rootfs}" ] || return 1
 	case "$board" in
@@ -84,6 +110,7 @@ platform_check_image() {
 	local board=$(cat /tmp/sysinfo/board_name)
 
 	case "$board" in
+	wa6x3xn | \
 	erlite | \
 	er)
 		local tar_file="$1"
@@ -93,6 +120,14 @@ platform_check_image() {
 			echo "The upgarde image is corrupt."
 			return 1
 		}
+		return 0
+		;;
+	aruba)
+		[ $(get_magic_word "$1") != "7f45" ] && {
+			echo "Invalid image type."
+			return 1
+		}
+
 		return 0
 		;;
 	esac

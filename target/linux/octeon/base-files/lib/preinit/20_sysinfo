@@ -1,8 +1,12 @@
 do_sysinfo_octeon() {
 	local machine
 	local name
+	local bobomips
+	local memtocal
 
 	machine=$(grep "^system type" /proc/cpuinfo | sed "s/system type.*: \(.*\)/\1/g")
+	bogomips=$(grep "^BogoMIPS" /proc/cpuinfo | sed "s/BogoMIPS.*: \(.*\)/\1/g")
+	memtocal=$(cat /proc/meminfo | grep -i "MemTotal" | awk '{print $2}')
 
 	case "$machine" in
 	"UBNT_E100"*)
@@ -15,6 +19,17 @@ do_sysinfo_octeon() {
 
 	"UBNT_E220"*)
 		name="erpro"
+		;;
+
+	"CN3010_EVB_HS5"*)
+		if [ $memtocal -lt 65536 ]; then
+			name="aruba"
+			machine="ARUBA AP-125"
+		else
+			name="wa6x3xn"
+			machine="HUAWEI WA603DN"
+			[ "$bogomips" = "600.00" ] && machine="HUAWEI WA633SN"
+		fi
 		;;
 
 	*)

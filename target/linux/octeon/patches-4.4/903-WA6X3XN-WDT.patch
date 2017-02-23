@@ -1,0 +1,147 @@
+--- a/arch/mips/cavium-octeon/octeon-platform.c
++++ b/arch/mips/cavium-octeon/octeon-platform.c
+@@ -28,6 +28,7 @@
+ #include <asm/octeon/cvmx-helper.h>
+ #include <asm/octeon/cvmx-helper-board.h>
+ #include <asm/octeon/cvmx-uctlx-defs.h>
++#include <asm/octeon/cvmx-gpio-defs.h>
+ 
+ /* Octeon Random Number Generator.  */
+ static int __init octeon_rng_device_init(void)
+@@ -431,6 +432,7 @@
+ 	{ .compatible = "cavium,octeon-3860-bootbus", },
+ 	{ .compatible = "cavium,mdio-mux", },
+ 	{ .compatible = "gpio-leds", },
++	{ .compatible = "linux,wdt-gpio", },
+ 	{},
+ };
+ 
+@@ -605,6 +607,8 @@
+ 		octeon_fdt_pip_port(iface, idx, p, count - 1, pmac);
+ }
+ 
++void octeon_gpio_wdt_trigger(void);
++
+ int __init octeon_prune_device_tree(void)
+ {
+ 	int i, max_port, uart_mask;
+@@ -977,9 +981,45 @@
+ 			fdt_nop_node(initial_boot_params, dsr1000n_leds);
+ 	}
+ 
++	octeon_gpio_wdt_trigger();
++	octeon_gpio_wdt_trigger();
++
+ 	return 0;
+ }
+ 
++void octeon_gpio_wdt_trigger(void)
++{
++	int wdt_gpio = 6;
++	static int wdt_count = 1;
++
++	union cvmx_gpio_bit_cfgx gpio_bit_cfgx;
++	union cvmx_gpio_tx_set gpio_tx_set;
++	union cvmx_gpio_tx_clr gpio_tx_clr;
++
++	if (wdt_gpio < 0)
++		return;
++
++	if (wdt_count == 1)
++	{
++		gpio_bit_cfgx.u64 = cvmx_read_csr(CVMX_GPIO_BIT_CFGX(wdt_gpio));
++		gpio_bit_cfgx.s.tx_oe = 1;
++	       	cvmx_write_csr(CVMX_GPIO_BIT_CFGX(wdt_gpio), gpio_bit_cfgx.u64);
++	}
++
++	if (wdt_count % 2)
++	{
++		gpio_tx_set.u64 = 0;
++		gpio_tx_set.s.set = 1 << wdt_gpio;
++		cvmx_write_csr(CVMX_GPIO_TX_SET, gpio_tx_set.u64);
++	} else {
++		gpio_tx_clr.u64 = 0;
++		gpio_tx_clr.s.clr = 1 << wdt_gpio;
++		cvmx_write_csr(CVMX_GPIO_TX_CLR, gpio_tx_clr.u64);
++	}
++
++	wdt_count++;
++}
++
+ static int __init octeon_publish_devices(void)
+ {
+ 	return of_platform_bus_probe(NULL, octeon_ids, NULL);
+--- a/drivers/gpio/gpio-octeon.c
++++ b/drivers/gpio/gpio-octeon.c
+@@ -150,7 +150,11 @@ static struct platform_driver octeon_gpio_driver = {
+ 	.remove		= octeon_gpio_remove,
+ };
+ 
+-module_platform_driver(octeon_gpio_driver);
++static int __init octeon_gpio_init(void)
++{
++	return platform_driver_register(&octeon_gpio_driver);
++}
++arch_initcall(octeon_gpio_init);
+ 
+ MODULE_DESCRIPTION("Cavium Inc. OCTEON GPIO Driver");
+ MODULE_AUTHOR("David Daney");
+--- a/drivers/pci/probe.c
++++ b/drivers/pci/probe.c
+@@ -21,6 +21,8 @@
+ #define CARDBUS_LATENCY_TIMER	176	/* secondary latency timer */
+ #define CARDBUS_RESERVE_BUSNR	3
+ 
++extern void octeon_gpio_wdt_trigger(void);
++
+ static struct resource busn_resource = {
+ 	.name	= "PCI busn",
+ 	.start	= 0,
+@@ -2065,6 +2067,8 @@
+ 	/* Reserve buses for SR-IOV capability. */
+ 	max += pci_iov_bus_range(bus);
+ 
++	octeon_gpio_wdt_trigger();
++
+ 	/*
+ 	 * After performing arch-dependent fixup of the bus, look behind
+ 	 * all PCI-to-PCI bridges on this bus.
+--- a/init/main.c
++++ b/init/main.c
+@@ -96,6 +96,7 @@ extern void radix_tree_init(void);
+ #ifndef CONFIG_DEBUG_RODATA
+ static inline void mark_rodata_ro(void) { }
+ #endif
++extern void octeon_gpio_wdt_trigger(void);
+ 
+ /*
+  * Debug helper: via this flag we know that we are in 'early bootup code'
+@@ -559,6 +560,8 @@ asmlinkage __visible void __init start_kernel(void)
+ 	build_all_zonelists(NULL, NULL);
+ 	page_alloc_init();
+ 
++	octeon_gpio_wdt_trigger();
++
+ 	pr_notice("Kernel command line: %s\n", boot_command_line);
+ 	parse_early_param();
+ 	after_dashes = parse_args("Booting kernel",
+@@ -693,6 +696,8 @@ asmlinkage __visible void __init start_kernel(void)
+ 
+ 	check_bugs();
+ 
++	octeon_gpio_wdt_trigger();
++
+ 	acpi_subsystem_init();
+ 	sfi_init_late();
+ 
+--- a/arch/mips/pci/pci-octeon.c
++++ b/arch/mips/pci/pci-octeon.c
+@@ -169,6 +169,8 @@
+ 
+ 	dev->dev.archdata.dma_ops = octeon_pci_dma_map_ops;
+ 
++	msleep(200);
++
+ 	return 0;
+ }
+ 
